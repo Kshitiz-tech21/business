@@ -1,0 +1,84 @@
+version: '3.8'
+
+services:
+  # Frontend UI - Next.js B2B SaaS Dashboard
+  frontend:
+    build:
+      context: ../frontend
+      dockerfile: Dockerfile
+    ports:
+      - "3000:3000"
+    environment:
+      - NEXT_PUBLIC_API_URL=http://localhost:8000
+    depends_on:
+      - api
+    networks:
+      - analytics_net
+
+  # Backend API
+  api:
+    build:
+      context: ..
+      dockerfile: deployments/Dockerfile
+    ports:
+      - "8000:8000"
+    environment:
+      - DATABASE_URL=postgresql://user:password@db:5432/analytics
+      - REDIS_URL=redis://redis:6379/0
+      - SECRET_KEY=SUPER_SECRET_B2B_SAAS_KEY
+    depends_on:
+      - db
+      - redis
+    networks:
+      - analytics_net
+
+  # Background Worker for AnalysisJobs and Pipelines
+  worker:
+    build:
+      context: ..
+      dockerfile: deployments/Dockerfile
+    command: celery -A app.worker.celery_app worker --loglevel=info
+    environment:
+      - DATABASE_URL=postgresql://user:password@db:5432/analytics
+      - REDIS_URL=redis://redis:6379/0
+    depends_on:
+      - db
+      - redis
+    networks:
+      - analytics_net
+
+  # PostgreSQL Database
+  db:
+    image: postgres:15-alpine
+    environment:
+      - POSTGRES_USER=user
+      - POSTGRES_PASSWORD=password
+      - POSTGRES_DB=analytics
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    networks:
+      - analytics_net
+
+  # Redis for caching and Celery broker
+  redis:
+    image: redis:7-alpine
+    networks:
+      - analytics_net
+
+    # Local LLM integration (Commented as requested)
+    # ollama:
+    #   image: ollama/ollama
+    #   volumes:
+    #     - ollama_data:/root/.ollama
+    #   ports:
+    #     - "11434:11434"
+    #   networks:
+    #     - analytics_net
+
+networks:
+  analytics_net:
+    driver: bridge
+
+volumes:
+  postgres_data:
+  ollama_data:
